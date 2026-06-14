@@ -11,6 +11,7 @@ from src.agent.nodes import (
     node_assess_confidence,
     node_rewrite_queries,
     node_reflect,
+    node_react_loop,
     node_detect_conflict,
     node_human_review,
     node_write_report,
@@ -32,6 +33,8 @@ def build_graph():
     builder.add_node("node_rag_search", node_rag_search)
     builder.add_node("node_assess_confidence", node_assess_confidence)
     builder.add_node("node_rewrite_queries", node_rewrite_queries)
+    builder.add_node("node_react_loop", node_react_loop)
+    builder.add_edge("node_react_loop", "node_reflect")
     builder.add_node("node_reflect", node_reflect)
     builder.add_node("node_detect_conflict", node_detect_conflict)
     builder.add_node("node_human_review", node_human_review)
@@ -50,7 +53,7 @@ def build_graph():
         "node_assess_confidence",
         route_after_confidence,
         {
-            "react_loop": "node_reflect",   # skip ReAct stub for now
+            "react_loop": "node_react_loop",   # skip ReAct stub for now
             "rewrite_queries": "node_rewrite_queries",
         }
     )

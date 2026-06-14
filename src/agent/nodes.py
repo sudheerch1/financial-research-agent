@@ -111,6 +111,69 @@ Respond with ONLY a number between 0.0 and 1.0. No other text."""
 
     return {"confidence_score": score}
 
+# ── Node 3b — ReAct Tool Loop ────────────────────────────────────────────────
+
+def node_react_loop(state: AgentState) -> dict:
+    """LLM decides which tools to call based on research goals."""
+    from src.tools.financial_tools import TOOLS
+
+    # Ask LLM which tools to call
+    prompt = f"""You are a financial research agent deciding which tools to use.
+
+Research question: {state["question"]}
+Research goals: {json.dumps(state["research_goals"], indent=2)}
+Evidence so far: {state["rag_results"]}
+Tools already called: {state["tool_calls_made"]}
+
+Available tools:
+- get_stock_price(ticker) — current price, 52w high/low, volume
+- get_financial_ratios(ticker) — PE, PB, debt/equity, ROE, margins
+- get_earnings_history(ticker) — quarterly EPS trend
+- get_company_news(ticker) — recent headlines
+- get_competitor_comparison(ticker) — sector/industry/market cap
+- search_web(query) — macro and news context
+- validate_data_consistency — always call this last
+
+Decide which tools to call. Extract the ticker symbol from the question.
+Respond with a JSON array of tool calls:
+[
+  {{"tool": "get_stock_price", "args": {{"ticker": "AAPL"}}}},
+  {{"tool": "validate_data_consistency", "args": {{}}}}
+]
+
+Return ONLY the JSON array, no other text."""
+
+    result = _call_llm(prompt)
+    clean = result.strip().replace("```json", "").replace("```", "").strip()
+    tool_calls = json.loads(clean)
+
+    # Execute each tool
+    new_tool_names = []
+    new_tool_results = []
+
+    for call in tool_calls:
+        tool_name = call["tool"]
+        args = call.get("args", {})
+
+        if tool_name not in TOOLS:
+            continue
+
+        tool_fn = TOOLS[tool_name]
+
+        # validate_data_consistency takes state, others take kwargs
+        if tool_name == "validate_data_consistency":
+            result = tool_fn(state)
+        else:
+            result = tool_fn(**args)
+
+        new_tool_names.append(tool_name)
+        new_tool_results.append(result)
+        print(f"   🔧 {tool_name}({args}) → done")
+
+    return {
+        "tool_calls_made": new_tool_names,
+        "tool_results": new_tool_results,
+    }
 
 # ── Node 4 ──────────────────────────────────────────────────────────────────
 
