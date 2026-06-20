@@ -1,10 +1,26 @@
 import boto3
 import json
 from src.agent.state import AgentState
+from langgraph.types import interrupt
 
 # Bedrock client
 bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
 LLM_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+
+
+def _safe_json_parse(raw_text: str, expect_list: bool = False):
+    """Shared helper — strips markdown fences and safely parses LLM JSON output.
+    Returns [] / {} on failure instead of raising, so a malformed LLM response
+    degrades the run instead of crashing it."""
+    clean = raw_text.strip().replace("```json", "").replace("```", "").strip()
+    try:
+        parsed = json.loads(clean)
+        if expect_list and not isinstance(parsed, list):
+            raise ValueError("Expected a JSON array")
+        return parsed
+    except (json.JSONDecodeError, ValueError) as e:
+        print(f"   ⚠️ JSON parse failed: {e} | raw: {clean[:200]}")
+        return [] if expect_list else {}
 
 
 def _call_llm(prompt: str) -> str:
@@ -39,9 +55,13 @@ Respond with a JSON array of strings. Example:
 Return ONLY the JSON array, no other text."""
 
     result = _call_llm(prompt)
-    # Strip markdown code fences if LLM wraps response
-    clean = result.strip().replace("```json", "").replace("```", "").strip()
-    goals = json.loads(clean)
+    goals = _safe_json_parse(result, expect_list=True)
+
+    # If planning itself failed to parse, fall back to a single generic goal
+    # rather than an empty goal list (which would make every downstream
+    # reflection trivially "complete").
+    if not goals:
+        goals = [f"Answer the research question: {state['question']}"]
 
     return {
         "research_goals": goals,
@@ -58,26 +78,30 @@ Return ONLY the JSON array, no other text."""
 
 
 # ── Node 2 ──────────────────────────────────────────────────────────────────
-
 def node_rag_search(state: AgentState) -> dict:
     """Searches SEC filings via RAG pipeline API."""
     import requests
+    import os
 
     query = state["question"]
-
-    # If rewritten queries exist, use the first one
     if state.get("rewritten_queries"):
         query = state["rewritten_queries"][0]
 
-    # --- STUB: replace with real API call when OpenSearch is live ---
-    # response = requests.post(
-    #     "https://k0injz47nk.execute-api.us-east-1.amazonaws.com/prod/query",
-    #     headers={"x-api-key": "YOUR_KEY", "Content-Type": "application/json"},
-    #     json={"question": query}
-    # )
-    # rag_results = response.json()["answer"]
-
-    rag_results = f"[STUB] RAG results for: {query}"
+    try:
+        response = requests.post(
+            "https://k0injz47nk.execute-api.us-east-1.amazonaws.com/prod/query",
+            headers={
+                "x-api-key": os.environ.get("RAG_API_KEY", ""),
+                "Content-Type": "application/json"
+            },
+            json={"question": query},
+            timeout=30
+        )
+        response.raise_for_status()
+        rag_results = response.json()["answer"]
+    except Exception as e:
+        print(f"   ⚠️ RAG API call failed: {e}")
+        rag_results = f"[STUB] RAG results for: {query}"
 
     return {
         "rag_results": rag_results,
@@ -102,14 +126,14 @@ Score the evidence quality from 0.0 to 1.0 where:
 Respond with ONLY a number between 0.0 and 1.0. No other text."""
 
     result = _call_llm(prompt)
-    score = float(result.strip())
-
-    # Stub always gets low confidence so we can test the rewrite path
-    # Remove this override once RAG is live
-    if "[STUB]" in state["rag_results"]:
-        score = 0.9  # force proceed during development
+    try:
+        score = float(result.strip())
+    except ValueError:
+        print(f"   ⚠️ Could not parse confidence score, raw: {result[:100]}")
+        score = 0.5  # neutral fallback — won't falsely trigger high- or low-confidence routing
 
     return {"confidence_score": score}
+
 
 # ── Node 3b — ReAct Tool Loop ────────────────────────────────────────────────
 
@@ -144,8 +168,7 @@ Respond with a JSON array of tool calls:
 Return ONLY the JSON array, no other text."""
 
     result = _call_llm(prompt)
-    clean = result.strip().replace("```json", "").replace("```", "").strip()
-    tool_calls = json.loads(clean)
+    tool_calls = _safe_json_parse(result, expect_list=True)
 
     # Execute each tool
     new_tool_names = []
@@ -156,6 +179,7 @@ Return ONLY the JSON array, no other text."""
         args = call.get("args", {})
 
         if tool_name not in TOOLS:
+            print(f"   ⚠️ LLM requested unknown tool '{tool_name}' — skipped")
             continue
 
         tool_fn = TOOLS[tool_name]
@@ -175,6 +199,7 @@ Return ONLY the JSON array, no other text."""
         "tool_results": new_tool_results,
     }
 
+
 # ── Node 4 ──────────────────────────────────────────────────────────────────
 
 def node_rewrite_queries(state: AgentState) -> dict:
@@ -191,9 +216,12 @@ Respond with a JSON array of 5 strings.
 Return ONLY the JSON array, no other text."""
 
     result = _call_llm(prompt)
-    # Strip markdown code fences if LLM wraps response
-    clean = result.strip().replace("```json", "").replace("```", "").strip()
-    queries = json.loads(clean)
+    queries = _safe_json_parse(result, expect_list=True)
+
+    # If rewriting fails to parse, fall back to retrying the original question
+    # rather than sending an empty query list into node_rag_search.
+    if not queries:
+        queries = [state["question"]]
 
     return {
         "rewritten_queries": queries,
@@ -224,13 +252,17 @@ Respond with a JSON object:
 Return ONLY the JSON object, no other text."""
 
     result = _call_llm(prompt)
-    # Strip markdown code fences if LLM wraps response
-    clean = result.strip().replace("```json", "").replace("```", "").strip()
-    parsed = json.loads(clean)
+    parsed = _safe_json_parse(result, expect_list=False)
+
+    # If parsing fails, parsed is {} — fall back to the previous goals_met
+    # state (or all-False if none exists yet) instead of a KeyError.
+    fallback_goals_met = state.get("goals_met") or [False] * len(state["research_goals"])
+    goals_met = parsed.get("goals_met", fallback_goals_met)
+    gaps_identified = parsed.get("gaps", [])
 
     return {
-        "goals_met": parsed["goals_met"],
-        "gaps_identified": parsed.get("gaps", []),
+        "goals_met": goals_met,
+        "gaps_identified": gaps_identified,
         "reflection_cycles": state.get("reflection_cycles", 0) + 1,
     }
 
@@ -245,8 +277,14 @@ Research question: {state["question"]}
 RAG results: {state["rag_results"]}
 Tool results: {json.dumps(state["tool_results"], indent=2)}
 
+IMPORTANT: Different financial metrics are not directly comparable. Revenue (total net sales)
+and net income (profit after expenses) are distinct figures — net income is typically much
+smaller than revenue and should never be compared against it as if they represent the same thing.
+Only flag a conflict when the SAME metric (e.g. revenue vs. revenue, or net income vs. net income)
+shows contradictory values across sources.
+
 Check for contradictions between data sources (e.g. revenue figures that don't match,
-conflicting dates, inconsistent financial metrics).
+conflicting dates, inconsistent financial metrics of the same type).
 
 Respond with a JSON object:
 {{
@@ -259,38 +297,35 @@ is_critical = true if the conflict would materially affect an investment decisio
 Return ONLY the JSON object, no other text."""
 
     result = _call_llm(prompt)
-    # Strip markdown code fences if LLM wraps response
-    clean = result.strip().replace("```json", "").replace("```", "").strip()
-    parsed = json.loads(clean)
+    parsed = _safe_json_parse(result, expect_list=False)
 
-# Force no conflict during stub development
-    if "[STUB]" in state["rag_results"]:
-        return {
-            "conflict_detected": False,
-            "is_critical": False,
-            "conflict_details": "",
-        }
+    # If parsing fails, parsed is {} — default to "no conflict" rather than
+    # crashing. This is a conservative fallback: a missed conflict still lets
+    # the report be written, just without the warning.
+    conflict_detected = parsed.get("conflict_detected", False)
+    is_critical = parsed.get("is_critical", False)
+    conflict_details = parsed.get("conflict_details", "")
 
     return {
-        "conflict_detected": parsed["conflict_detected"],
-        "is_critical": parsed["is_critical"],
-        "conflict_details": parsed["conflict_details"],
+        "conflict_detected": conflict_detected,
+        "is_critical": is_critical,
+        "conflict_details": conflict_details,
+        "report_mode": "warning" if conflict_detected else "standard",
     }
 
 
 # ── Node 7 ──────────────────────────────────────────────────────────────────
 
 def node_human_review(state: AgentState) -> dict:
-    """Pauses for human decision on critical conflicts (interrupt point)."""
-    # LangGraph interrupt is wired in graph.py
-    # This node just surfaces the conflict for the human
-    print("\n⚠️  HUMAN REVIEW REQUIRED")
-    print(f"Conflict detected: {state['conflict_details']}")
-    print("Options: 'sec_primary' | 'balanced' | 'disputed'")
-
-    # In graph.py this node will be wrapped with interrupt()
-    # human_approval_decision will be injected via graph.update_state()
-    return {}
+    decision = interrupt({
+        "conflict_details": state["conflict_details"],
+        "question": state["question"],
+        "options": ["sec_primary", "balanced", "disputed"],
+    })
+    return {
+        "human_approval_decision": decision,
+        "report_mode": decision,  # decision is already "sec_primary" / "balanced" / "disputed" — matches mode_instruction keys directly
+    }
 
 
 # ── Node 8 ──────────────────────────────────────────────────────────────────

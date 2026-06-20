@@ -34,7 +34,6 @@ def build_graph():
     builder.add_node("node_assess_confidence", node_assess_confidence)
     builder.add_node("node_rewrite_queries", node_rewrite_queries)
     builder.add_node("node_react_loop", node_react_loop)
-    builder.add_edge("node_react_loop", "node_reflect")
     builder.add_node("node_reflect", node_reflect)
     builder.add_node("node_detect_conflict", node_detect_conflict)
     builder.add_node("node_human_review", node_human_review)
@@ -43,10 +42,11 @@ def build_graph():
     # ── Entry Point ──────────────────────────────────────────────────────────
     builder.add_edge(START, "node_plan")
 
-    # ── Fixed Edges ──────────────────────────────────────────────────────────
+# ── Fixed Edges ──────────────────────────────────────────────────────────
     builder.add_edge("node_plan", "node_rag_search")
     builder.add_edge("node_rag_search", "node_assess_confidence")
     builder.add_edge("node_rewrite_queries", "node_rag_search")
+    builder.add_edge("node_react_loop", "node_reflect")
 
     # ── Conditional Edge 1 — after confidence assessment ─────────────────────
     builder.add_conditional_edges(

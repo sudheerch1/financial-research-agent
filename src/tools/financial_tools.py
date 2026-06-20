@@ -3,6 +3,7 @@ import json
 import yfinance as yf
 from src.agent.state import AgentState
 
+
 bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
 LLM_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 
@@ -17,8 +18,8 @@ def get_stock_price(ticker: str) -> dict:
             "tool": "get_stock_price",
             "ticker": ticker,
             "current_price": current,
-            "52w_high": round(hist["High"].max(), 2),
-            "52w_low": round(hist["Low"].min(), 2),
+            "52w_high": float(round(hist["High"].max(), 2)),
+            "52w_low": float(round(hist["Low"].min(), 2)),
             "avg_volume": int(hist["Volume"].mean()),
         }
     except Exception as e:
@@ -49,19 +50,28 @@ def get_earnings_history(ticker: str) -> dict:
     """Gets quarterly earnings history and EPS trend."""
     try:
         stock = yf.Ticker(ticker)
-        earnings = stock.quarterly_earnings
-        if earnings is not None and not earnings.empty:
-            recent = earnings.head(4).to_dict()
+        income = stock.quarterly_income_stmt
+        if income is not None and not income.empty:
+            # Pull Net Income row across last 4 quarters
+            if "Net Income" in income.index:
+                series = income.loc["Net Income"].head(4)
+                series.index = series.index.astype(str)
+                net_income = series.to_dict()
+            else:
+                df = income.head(4)
+                df.columns = df.columns.astype(str)
+                net_income = df.to_dict()
         else:
-            recent = {}
+            net_income = {}
         return {
             "tool": "get_earnings_history",
             "ticker": ticker,
-            "quarterly_earnings": recent,
+            "quarterly_earnings": net_income,
         }
     except Exception as e:
         return {"tool": "get_earnings_history", "ticker": ticker, "error": str(e)}
-
+    
+    
 
 def get_company_news(ticker: str) -> dict:
     """Gets recent news headlines for a company."""
