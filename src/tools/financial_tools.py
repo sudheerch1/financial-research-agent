@@ -41,18 +41,20 @@ def get_financial_ratios(ticker: str) -> dict:
             "roe": info.get("returnOnEquity", "N/A"),
             "profit_margin": info.get("profitMargins", "N/A"),
             "revenue_growth": info.get("revenueGrowth", "N/A"),
+            "data_note": "revenue_growth reflects the most recent trailing period available from Yahoo Finance — not necessarily the same fiscal year(s) referenced in the research question. Do not directly compare this figure to a specific historical fiscal year's growth rate without confirming the time periods overlap.",
         }
     except Exception as e:
         return {"tool": "get_financial_ratios", "ticker": ticker, "error": str(e)}
 
 
 def get_earnings_history(ticker: str) -> dict:
-    """Gets quarterly earnings history and EPS trend."""
+    """Gets the most recent quarterly earnings (Net Income) available from yfinance.
+    Note: yfinance only exposes the last ~4-5 quarters — NOT historical quarters
+    matching an arbitrary requested fiscal year range."""
     try:
         stock = yf.Ticker(ticker)
         income = stock.quarterly_income_stmt
         if income is not None and not income.empty:
-            # Pull Net Income row across last 4 quarters
             if "Net Income" in income.index:
                 series = income.loc["Net Income"].head(4)
                 series.index = series.index.astype(str)
@@ -67,6 +69,7 @@ def get_earnings_history(ticker: str) -> dict:
             "tool": "get_earnings_history",
             "ticker": ticker,
             "quarterly_earnings": net_income,
+            "data_note": "Most recent quarters available via yfinance — may not align with a historical period requested in the research question.",
         }
     except Exception as e:
         return {"tool": "get_earnings_history", "ticker": ticker, "error": str(e)}

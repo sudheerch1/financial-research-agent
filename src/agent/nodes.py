@@ -283,8 +283,14 @@ smaller than revenue and should never be compared against it as if they represen
 Only flag a conflict when the SAME metric (e.g. revenue vs. revenue, or net income vs. net income)
 shows contradictory values across sources.
 
+IMPORTANT: Some tool results include a "data_note" field indicating they only cover the most
+recent period available (not necessarily the historical period the question asks about). If a
+tool result's time period doesn't overlap with the period the question or RAG results are
+discussing, that is a DATA GAP, not a contradiction — do not flag it as a conflict.
+
 Check for contradictions between data sources (e.g. revenue figures that don't match,
-conflicting dates, inconsistent financial metrics of the same type).
+conflicting dates, inconsistent financial metrics of the same type) ONLY when comparing data
+from the same or overlapping time periods.
 
 Respond with a JSON object:
 {{
@@ -299,9 +305,6 @@ Return ONLY the JSON object, no other text."""
     result = _call_llm(prompt)
     parsed = _safe_json_parse(result, expect_list=False)
 
-    # If parsing fails, parsed is {} — default to "no conflict" rather than
-    # crashing. This is a conservative fallback: a missed conflict still lets
-    # the report be written, just without the warning.
     conflict_detected = parsed.get("conflict_detected", False)
     is_critical = parsed.get("is_critical", False)
     conflict_details = parsed.get("conflict_details", "")
@@ -312,7 +315,6 @@ Return ONLY the JSON object, no other text."""
         "conflict_details": conflict_details,
         "report_mode": "warning" if conflict_detected else "standard",
     }
-
 
 # ── Node 7 ──────────────────────────────────────────────────────────────────
 
