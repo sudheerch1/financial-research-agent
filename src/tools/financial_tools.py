@@ -2,6 +2,8 @@ import boto3
 import json
 import yfinance as yf
 from src.agent.state import AgentState
+import os
+from tavily import TavilyClient
 
 
 bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
@@ -118,14 +120,37 @@ def get_competitor_comparison(ticker: str) -> dict:
 
 
 def search_web(query: str) -> dict:
-    """Searches for macro/news context using Bedrock's knowledge."""
-    # Stub — replace with Tavily API in Week 2
-    return {
-        "tool": "search_web",
-        "query": query,
-        "result": f"[STUB] Web search results for: {query}",
-    }
+    """Searches for macro/news context using live web search (Tavily)."""
+    try:
+        client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+        response = client.search(
+            query=query,
+            max_results=5,
+            search_depth="basic",
+            include_answer=True,
+        )
 
+        synthesized = response.get("answer", "")
+        sources = "\n".join(
+            f"- {r['title']} ({r['url']}): {r['content'][:200]}"
+            for r in response.get("results", [])
+        )
+        result_text = f"{synthesized}\n\nSources:\n{sources}" if synthesized else sources
+
+        return {
+            "tool": "search_web",
+            "query": query,
+            "result": result_text,
+            "data_note": "Live web search via Tavily. Reflects current/recent web content, not historical filings — may not align with the fiscal period under discussion.",
+        }
+    except Exception as e:
+        return {
+            "tool": "search_web",
+            "query": query,
+            "result": f"[ERROR] Web search failed: {e}",
+            "data_note": "Web search unavailable for this call.",
+        }
+        
 
 def validate_data_consistency(state: AgentState) -> dict:
     """Cross-checks data consistency across all gathered sources."""
