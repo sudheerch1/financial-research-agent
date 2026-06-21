@@ -12,7 +12,6 @@ class AgentState(TypedDict):
     # --- RAG ---
     rag_results: str                       # raw results from RAG search
     confidence_score: float                # 0.0–1.0 evidence quality score
-    retrieval_strategy: str                # "A" (expand) or "B" (rewrite)
     iteration: int                         # RAG retry counter (max 5)
     rewritten_queries: list[str]           # query variations from node_rewrite
 

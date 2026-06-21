@@ -225,7 +225,6 @@ Return ONLY the JSON array, no other text."""
 
     return {
         "rewritten_queries": queries,
-        "retrieval_strategy": "B",
     }
 
 
