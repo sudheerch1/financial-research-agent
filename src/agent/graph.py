@@ -64,7 +64,7 @@ def build_graph():
         route_after_reflection,
         {
             "detect_conflict": "node_detect_conflict",
-            "react_loop": "node_rag_search",
+            "retry_search": "node_rag_search",
         }
     )
 

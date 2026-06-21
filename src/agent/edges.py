@@ -4,9 +4,9 @@ from src.agent.state import AgentState
 def route_after_confidence(state: AgentState) -> str:
     """Edge 1: after node_assess_confidence"""
     if state["iteration"] >= 5:
-        return "react_loop"
+        return "react_loop"          # ← change this line
     if state["confidence_score"] >= 0.75:
-        return "react_loop"
+        return "react_loop"          # ← change this line
     return "rewrite_queries"
 
 
@@ -16,7 +16,7 @@ def route_after_reflection(state: AgentState) -> str:
         return "detect_conflict"
     if all(state["goals_met"]):
         return "detect_conflict"
-    return "react_loop"
+    return "retry_search"
 
 
 def route_after_conflict(state: AgentState) -> str:
