@@ -66,3 +66,4 @@ def run(question: str):
 
 if __name__ == "__main__":
     run("What is Apple's revenue trend over the last 3 years?")
+    #run("What's the latest news on Apple's AI strategy?")
