@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph_checkpoint_aws import DynamoDBSaver
 
 from src.agent.state import AgentState
 from src.agent.nodes import (
@@ -94,7 +94,11 @@ def build_graph():
     builder.add_edge("node_write_report", END)
 
     # ── Compile with memory checkpointer ─────────────────────────────────────
-    memory = MemorySaver()
+    memory = DynamoDBSaver(
+        table_name="financial-research-agent-checkpoints",
+        region_name="us-east-1",
+        ttl_seconds=86400 * 7,  # auto-expire after 7 days — keeps demo costs bounded
+    )
     graph = builder.compile(checkpointer=memory)
 
     return graph
