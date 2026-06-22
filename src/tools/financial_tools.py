@@ -152,7 +152,7 @@ def search_web(query: str) -> dict:
         }
         
 
-def validate_data_consistency(state: AgentState) -> dict:
+def check_data_completeness(state: AgentState) -> dict:
     """Cross-checks data consistency across all gathered sources."""
     issues = []
 
@@ -166,7 +166,7 @@ def validate_data_consistency(state: AgentState) -> dict:
         issues.append("No tool results gathered yet")
 
     return {
-        "tool": "validate_data_consistency",
+        "tool": "check_data_completeness",
         "issues_found": len(issues) > 0,
         "issues": issues,
         "sources_checked": ["rag_results", "tool_results"],
@@ -181,5 +181,5 @@ TOOLS = {
     "get_company_news": get_company_news,
     "get_competitor_comparison": get_competitor_comparison,
     "search_web": search_web,
-    "validate_data_consistency": validate_data_consistency,
+    "check_data_completeness": check_data_completeness,
 }

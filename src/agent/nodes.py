@@ -156,13 +156,13 @@ Available tools:
 - get_company_news(ticker) — recent headlines
 - get_competitor_comparison(ticker) — sector/industry/market cap
 - search_web(query) — macro and news context
-- validate_data_consistency — always call this last
+- check_data_completeness — always call this last
 
 Decide which tools to call. Extract the ticker symbol from the question.
 Respond with a JSON array of tool calls:
 [
   {{"tool": "get_stock_price", "args": {{"ticker": "AAPL"}}}},
-  {{"tool": "validate_data_consistency", "args": {{}}}}
+  {{"tool": "check_data_completeness", "args": {{}}}}
 ]
 
 Return ONLY the JSON array, no other text."""
@@ -184,8 +184,8 @@ Return ONLY the JSON array, no other text."""
 
         tool_fn = TOOLS[tool_name]
 
-        # validate_data_consistency takes state, others take kwargs
-        if tool_name == "validate_data_consistency":
+        # check_data_completeness takes state, others take kwargs
+        if tool_name == "check_data_completeness":
             result = tool_fn(state)
         else:
             result = tool_fn(**args)
