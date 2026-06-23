@@ -4,11 +4,33 @@ import yfinance as yf
 from src.agent.state import AgentState
 import os
 from tavily import TavilyClient
+from urllib.parse import urlparse
 
+# Domains excluded from financial research sourcing — social platforms and
+# user-generated content sites are not appropriate sources for material
+# financial claims.
+BLACKLISTED_DOMAINS = {
+    "facebook.com",
+    "twitter.com",
+    "x.com",
+    "reddit.com",
+    "instagram.com",
+    "tiktok.com",
+    "pinterest.com",
+    "quora.com",
+}
 
 bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
 LLM_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 
+def _is_blacklisted(url: str) -> bool:
+    """Checks if a URL's domain (or its parent domain) is blacklisted."""
+    try:
+        domain = urlparse(url).netloc.lower()
+        domain = domain.replace("www.", "")
+        return any(domain == bd or domain.endswith(f".{bd}") for bd in BLACKLISTED_DOMAINS)
+    except Exception:
+        return False
 
 def get_stock_price(ticker: str) -> dict:
     """Gets current and historical stock price for a ticker symbol."""
@@ -130,10 +152,13 @@ def search_web(query: str) -> dict:
             include_answer=True,
         )
 
+        raw_results = response.get("results", [])
+        filtered_results = [r for r in raw_results if not _is_blacklisted(r["url"])]
+
         synthesized = response.get("answer", "")
         sources = "\n".join(
             f"- {r['title']} ({r['url']}): {r['content'][:200]}"
-            for r in response.get("results", [])
+            for r in filtered_results
         )
         result_text = f"{synthesized}\n\nSources:\n{sources}" if synthesized else sources
 
@@ -150,7 +175,6 @@ def search_web(query: str) -> dict:
             "result": f"[ERROR] Web search failed: {e}",
             "data_note": "Web search unavailable for this call.",
         }
-        
 
 def check_data_completeness(state: AgentState) -> dict:
     """Cross-checks data consistency across all gathered sources."""
