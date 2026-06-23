@@ -154,8 +154,14 @@ def search_web(query: str) -> dict:
 
         raw_results = response.get("results", [])
         filtered_results = [r for r in raw_results if not _is_blacklisted(r["url"])]
+        any_blacklisted = len(filtered_results) < len(raw_results)
 
-        synthesized = response.get("answer", "")
+        # Tavily's synthesized answer is generated server-side from the
+        # unfiltered raw results — if any source was blacklisted, the
+        # answer text itself may be contaminated even though it won't be
+        # cited directly. Drop it in that case rather than trust it.
+        synthesized = "" if any_blacklisted else response.get("answer", "")
+
         sources = "\n".join(
             f"- {r['title']} ({r['url']}): {r['content'][:200]}"
             for r in filtered_results
@@ -175,7 +181,7 @@ def search_web(query: str) -> dict:
             "result": f"[ERROR] Web search failed: {e}",
             "data_note": "Web search unavailable for this call.",
         }
-
+        
 def check_data_completeness(state: AgentState) -> dict:
     """Cross-checks data consistency across all gathered sources."""
     issues = []
