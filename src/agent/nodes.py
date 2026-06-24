@@ -363,7 +363,11 @@ Write a structured investment research report with:
 4. Confidence Assessment
 5. Recommendation
 
-Be specific, cite sources, and flag any limitations."""
+Be specific, cite sources, and flag any limitations.
+
+Only cite sources that appear verbatim in the provided source list above.
+Do not name a publication, platform, or outlet unless its URL is present
+in the evidence you were given for this query."""
 
     report = _call_llm(prompt)
 
