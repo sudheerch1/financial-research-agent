@@ -1,10 +1,11 @@
 """
 FastAPI wrapper for the financial-research-agent LangGraph.
 
-Stub stage: routes, models, and run-state plumbing are wired and testable
-end-to-end with a fake graph runner. Swap `fake_run_graph` /
-`fake_resume_graph` for real calls into your compiled graph
-(graph.invoke / graph.stream + Command(resume=...)) in the next pass.
+Wired to the real compiled graph (src.agent.graph.agent_graph), using the
+same stream()/interrupt()/Command(resume=...) pattern as run_agent.py.
+Each run_id becomes the LangGraph thread_id, so the DynamoDB checkpointer
+keeps the actual graph state durable across requests; run_store.py only
+tracks API-facing status for polling.
 
 Run locally:
     uvicorn app.main:app --reload --port 8000
@@ -17,9 +18,8 @@ Test with PowerShell:
 
 from __future__ import annotations
 
-import time
-
 from fastapi import BackgroundTasks, FastAPI, HTTPException
+from langgraph.types import Command
 
 from app.models import (
     ResultResponse,
@@ -30,55 +30,63 @@ from app.models import (
     StatusResponse,
 )
 from app.run_store import RunStatus, run_store
+from src.agent.graph import agent_graph
 
 app = FastAPI(title="Financial Research Agent API", version="0.1.0")
 
 
 # ---------------------------------------------------------------------------
-# Graph execution — STUBBED. Replace these two functions with real LangGraph
-# calls. Keep the signatures the same so the route handlers don't change.
+# Graph execution — wired to the real compiled graph (DynamoDB-checkpointed).
+# Mirrors the stream/interrupt pattern from run_agent.py exactly, so behavior
+# matches what's already been validated by hand at the CLI.
 # ---------------------------------------------------------------------------
 
-def fake_run_graph(run_id: str, query: str) -> None:
-    """Stand-in for graph.invoke(...). Simulates: plan -> rag_search -> ...
-    -> human_review interrupt. Replace body with real graph.stream() call,
-    persisting graph_thread_config (e.g. {"configurable": {"thread_id": run_id}})
-    so /resume can reconnect to the same checkpoint."""
-    run_store.update_run(run_id, status=RunStatus.RUNNING, current_node="node_plan")
-    time.sleep(0.5)  # placeholder for real node latency
+def _stream_and_track(run_id: str, graph_input: dict | Command, config: dict) -> None:
+    """Drives one leg of graph execution (either the initial run or a resume)
+    via stream(), updating run_store as each node completes. Stops and marks
+    PAUSED_FOR_REVIEW if an interrupt is hit; marks COMPLETED on final_report."""
+    try:
+        for step in agent_graph.stream(graph_input, config=config, stream_mode="updates"):
+            if "__interrupt__" in step:
+                payload = step["__interrupt__"][0].value
+                run_store.update_run(
+                    run_id,
+                    status=RunStatus.PAUSED_FOR_REVIEW,
+                    current_node="node_human_review",
+                    interrupt_payload=payload,
+                    graph_thread_config=config,
+                )
+                return
 
-    run_store.update_run(run_id, current_node="node_rag_search")
-    time.sleep(0.5)
+            for node_name, output in step.items():
+                run_store.update_run(run_id, current_node=node_name)
+                if output and "final_report" in output:
+                    run_store.update_run(
+                        run_id,
+                        status=RunStatus.COMPLETED,
+                        current_node=None,
+                        interrupt_payload=None,
+                        result={
+                            "report": output["final_report"],
+                            "metadata": {"report_mode": output.get("report_mode")},
+                        },
+                    )
+                    return
+    except Exception as exc:  # noqa: BLE001 — surface any graph-level failure via /status
+        run_store.update_run(run_id, status=RunStatus.FAILED, error=str(exc))
 
-    # Simulate hitting the human-in-the-loop interrupt
-    run_store.update_run(
-        run_id,
-        status=RunStatus.PAUSED_FOR_REVIEW,
-        current_node="node_human_review",
-        interrupt_payload={
-            "reason": "conflict_detected",
-            "summary": "STUB: RAG figure disagrees with web-search figure.",
-        },
-        graph_thread_config={"configurable": {"thread_id": run_id}},
-    )
+
+def run_graph(run_id: str, question: str) -> None:
+    config = {"configurable": {"thread_id": run_id}}
+    run_store.update_run(run_id, status=RunStatus.RUNNING, current_node="node_plan", graph_thread_config=config)
+    _stream_and_track(run_id, {"question": question}, config)
 
 
-def fake_resume_graph(run_id: str, decision: str, notes: str | None) -> None:
-    """Stand-in for graph.invoke(Command(resume=...), config=graph_thread_config).
-    Replace with the real resume call using the stored graph_thread_config."""
+def resume_graph(run_id: str, decision: str) -> None:
+    record = run_store.get_run(run_id)
+    config = record.graph_thread_config
     run_store.update_run(run_id, status=RunStatus.RUNNING, current_node="node_write_report")
-    time.sleep(0.5)
-
-    run_store.update_run(
-        run_id,
-        status=RunStatus.COMPLETED,
-        current_node=None,
-        interrupt_payload=None,
-        result={
-            "report": f"STUB REPORT (decision={decision!r}, notes={notes!r}).",
-            "metadata": {"mode": "report_mode_stub"},
-        },
-    )
+    _stream_and_track(run_id, Command(resume=decision), config)
 
 
 # ---------------------------------------------------------------------------
@@ -88,7 +96,7 @@ def fake_resume_graph(run_id: str, decision: str, notes: str | None) -> None:
 @app.post("/run", response_model=RunResponse)
 def run(request: RunRequest, background_tasks: BackgroundTasks) -> RunResponse:
     record = run_store.create_run(input_payload=request.model_dump())
-    background_tasks.add_task(fake_run_graph, record.run_id, request.query)
+    background_tasks.add_task(run_graph, record.run_id, request.query)
     return RunResponse(run_id=record.run_id, status=record.status.value)
 
 
@@ -110,7 +118,7 @@ def resume(run_id: str, request: ResumeRequest, background_tasks: BackgroundTask
             status_code=409,
             detail=f"run_id is in status '{record.status.value}', not awaiting resume",
         )
-    background_tasks.add_task(fake_resume_graph, run_id, request.decision, request.notes)
+    background_tasks.add_task(resume_graph, run_id, request.decision)
     run_store.update_run(run_id, status=RunStatus.RUNNING)
     return ResumeResponse(run_id=run_id, status=RunStatus.RUNNING.value)
 

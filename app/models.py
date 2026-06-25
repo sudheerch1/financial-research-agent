@@ -4,7 +4,7 @@ Pydantic schemas for the financial-research-agent FastAPI wrapper.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -35,8 +35,9 @@ class StatusResponse(BaseModel):
 
 
 class ResumeRequest(BaseModel):
-    """Body for POST /resume/{run_id} — answers the human-review interrupt."""
-    decision: str = Field(..., description="e.g. 'approve', 'reject', or free-text human feedback")
+    """Body for POST /resume/{run_id} — answers the human-review interrupt.
+    Values must match what node_human_review's interrupt() expects."""
+    decision: Literal["sec_primary", "balanced", "disputed"]
     notes: Optional[str] = None
 
 
