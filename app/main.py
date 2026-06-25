@@ -31,9 +31,16 @@ from app.models import (
 )
 from app.run_store import RunStatus, run_store
 from src.agent.graph import agent_graph
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="Financial Research Agent API", version="0.1.0")
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8501"],  # Streamlit default port
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ---------------------------------------------------------------------------
 # Graph execution — wired to the real compiled graph (DynamoDB-checkpointed).
