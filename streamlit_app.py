@@ -16,6 +16,11 @@ import streamlit as st
 
 API_BASE_URL = "http://localhost:8000"  # swap to AWS URL for office-laptop demo
 
+def escape_markdown_dollars(text: str) -> str:
+    """Streamlit's markdown renderer treats $...$ as LaTeX math delimiters,
+    which mangles dollar-amount-heavy financial reports. Escape them."""
+    return text.replace("$", "\\$")
+
 st.set_page_config(page_title="Financial Research Agent", layout="centered")
 st.title("Financial Research Agent")
 
@@ -115,7 +120,7 @@ else:
 
         st.success("Report complete.")
         st.markdown("### Report")
-        st.markdown(result_data.get("report", "_No report content returned._"))
+        st.markdown(escape_markdown_dollars(result_data.get("report", "_No report content returned._")))
 
         metadata = result_data.get("metadata")
         if metadata:

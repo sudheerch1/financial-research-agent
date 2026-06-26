@@ -137,6 +137,7 @@ Respond with ONLY a number between 0.0 and 1.0. No other text."""
 
 # ── Node 3b — ReAct Tool Loop ────────────────────────────────────────────────
 
+
 def node_react_loop(state: AgentState) -> dict:
     """LLM decides which tools to call based on research goals."""
     from src.tools.financial_tools import TOOLS
@@ -186,19 +187,18 @@ Return ONLY the JSON array, no other text."""
 
         # check_data_completeness takes state, others take kwargs
         if tool_name == "check_data_completeness":
-            result = tool_fn(state)
+            tool_output = tool_fn(state)
         else:
-            result = tool_fn(**args)
+            tool_output = tool_fn(**args)
 
         new_tool_names.append(tool_name)
-        new_tool_results.append(result)
+        new_tool_results.append(tool_output)
         print(f"   🔧 {tool_name}({args}) → done")
 
     return {
         "tool_calls_made": new_tool_names,
         "tool_results": new_tool_results,
     }
-
 
 # ── Node 4 ──────────────────────────────────────────────────────────────────
 
@@ -301,12 +301,17 @@ Respond with a JSON object:
 is_critical = true if the conflict would materially affect an investment decision.
 Return ONLY the JSON object, no other text."""
 
+    print(f"   🔎 [conflict check inputs] RAG: {state['rag_results'][:200]}")
+    print(f"   🔎 [conflict check inputs] Tools: {json.dumps(state['tool_results'])[:300]}")
+    
     result = _call_llm(prompt)
     parsed = _safe_json_parse(result, expect_list=False)
 
     conflict_detected = parsed.get("conflict_detected", False)
     is_critical = parsed.get("is_critical", False)
     conflict_details = parsed.get("conflict_details", "")
+
+    print(f"   🔎 conflict_detected={conflict_detected} | is_critical={is_critical} | details={conflict_details[:150]}")
 
     return {
         "conflict_detected": conflict_detected,
