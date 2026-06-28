@@ -86,10 +86,12 @@ def node_rag_search(state: AgentState) -> dict:
     query = state["question"]
     if state.get("rewritten_queries"):
         query = state["rewritten_queries"][0]
-
+    
+    print(f"   📤 RAG query sent: {query}")
+    
     try:
         response = requests.post(
-            "https://k0injz47nk.execute-api.us-east-1.amazonaws.com/prod/query",
+            os.environ.get("RAG_API_ENDPOINT", "https://k0injz47nk.execute-api.us-east-1.amazonaws.com/prod/query"),
             headers={
                 "x-api-key": os.environ.get("RAG_API_KEY", ""),
                 "Content-Type": "application/json"
@@ -139,10 +141,9 @@ Respond with ONLY a number between 0.0 and 1.0. No other text."""
 
 
 def node_react_loop(state: AgentState) -> dict:
-    """LLM decides which tools to call based on research goals."""
+    """LLM decides which tools to use, scoped to the question's time window."""
     from src.tools.financial_tools import TOOLS
 
-    # Ask LLM which tools to call
     prompt = f"""You are a financial research agent deciding which tools to use.
 
 Research question: {state["question"]}
@@ -150,7 +151,13 @@ Research goals: {json.dumps(state["research_goals"], indent=2)}
 Evidence so far: {state["rag_results"]}
 Tools already called: {state["tool_calls_made"]}
 
-Available tools:
+STEP 1 — Determine scope: Identify the specific fiscal year(s) or date range this
+question is actually asking about (e.g. "last 3 years" relative to the most recent
+fiscal year in the evidence above means exactly those 3 fiscal years — no more,
+no fewer). Do not include any year outside that range unless the question
+explicitly asks for forward-looking guidance, projections, or "most recent" data.
+
+STEP 2 — Available tools:
 - get_stock_price(ticker) — current price, 52w high/low, volume
 - get_financial_ratios(ticker) — PE, PB, debt/equity, ROE, margins
 - get_earnings_history(ticker) — quarterly EPS trend
@@ -158,6 +165,11 @@ Available tools:
 - get_competitor_comparison(ticker) — sector/industry/market cap
 - search_web(query) — macro and news context
 - check_data_completeness — always call this last
+
+When calling search_web, the query string MUST explicitly include the fiscal year(s)
+identified in Step 1 (e.g. "Apple fiscal year 2024 revenue", not just "Apple revenue").
+Never write a search_web query that could plausibly return data for years outside
+the identified scope.
 
 Decide which tools to call. Extract the ticker symbol from the question.
 Respond with a JSON array of tool calls:
@@ -171,7 +183,6 @@ Return ONLY the JSON array, no other text."""
     result = _call_llm(prompt)
     tool_calls = _safe_json_parse(result, expect_list=True)
 
-    # Execute each tool
     new_tool_names = []
     new_tool_results = []
 
@@ -185,7 +196,6 @@ Return ONLY the JSON array, no other text."""
 
         tool_fn = TOOLS[tool_name]
 
-        # check_data_completeness takes state, others take kwargs
         if tool_name == "check_data_completeness":
             tool_output = tool_fn(state)
         else:
@@ -199,7 +209,7 @@ Return ONLY the JSON array, no other text."""
         "tool_calls_made": new_tool_names,
         "tool_results": new_tool_results,
     }
-
+    
 # ── Node 4 ──────────────────────────────────────────────────────────────────
 
 def node_rewrite_queries(state: AgentState) -> dict:
@@ -223,6 +233,8 @@ Return ONLY the JSON array, no other text."""
     if not queries:
         queries = [state["question"]]
 
+    print(f"   ✏️ Rewritten queries: {queries}") 
+    
     return {
         "rewritten_queries": queries,
     }
@@ -343,7 +355,13 @@ def node_write_report(state: AgentState) -> dict:
     mode_instruction = {
         "standard": "Write a confident investment research report.",
         "warning": "Write the report but include a data conflict warning section.",
-        "sec_primary": "Write the report treating SEC filings as the authoritative source.",
+        "sec_primary": (
+        "Write the report treating SEC filings (the RAG/SEC results) as the sole "
+        "authoritative source for any metric where it conflicts with other evidence. "
+        "When RAG/SEC results and tool results (e.g. web search, third-party aggregators) "
+        "report different values for the same metric and period, use ONLY the RAG/SEC "
+        "figure throughout the entire report — do not cite, blend, or average in the "
+        "conflicting web-sourced figure, even as a secondary data point."),
         "balanced": "Write the report presenting both data sources with equal weight.",
         "disputed": "Write the report flagging the key metrics as disputed.",
     }.get(mode, "Write a confident investment research report.")
