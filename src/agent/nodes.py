@@ -2,6 +2,7 @@ import boto3
 import json
 from src.agent.state import AgentState
 from langgraph.types import interrupt
+import re
 
 # Bedrock client
 bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
@@ -283,6 +284,24 @@ Return ONLY the JSON object, no other text."""
     }
 
 
+def _verify_cited_figures(conflict_details: str, rag_results: str, tool_results: list) -> bool:
+    """Returns True if every dollar-amount figure cited in conflict_details
+    actually appears in the source text it was supposedly drawn from.
+    Returns False if any cited figure is fabricated (not found anywhere
+    in the actual evidence) — a strong signal of hallucination."""
+    source_text = rag_results + " " + json.dumps(tool_results)
+
+    # Extract dollar figures like "$388.957 billion", "$11,043 million", "$7.8 billion"
+    cited_figures = re.findall(r"\$[\d,]+\.?\d*\s*(?:billion|million)?", conflict_details)
+
+    for figure in cited_figures:
+        # Normalize and check rough presence — strip $ and "billion"/"million" labels,
+        # compare the numeric core against source text
+        numeric_part = re.search(r"[\d,]+\.?\d*", figure)
+        if numeric_part and numeric_part.group() not in source_text:
+            return False
+    return True
+
 # ── Node 6 ──────────────────────────────────────────────────────────────────
 
 def node_detect_conflict(state: AgentState) -> dict:
@@ -303,6 +322,16 @@ IMPORTANT: Some tool results include a "data_note" field indicating they only co
 recent period available (not necessarily the historical period the question asks about). If a
 tool result's time period doesn't overlap with the period the question or RAG results are
 discussing, that is a DATA GAP, not a contradiction — do not flag it as a conflict.
+
+IMPORTANT: A conflict must be between two different things — either two different sources
+reporting different values for the same metric/period, or a source containing an actual
+mathematical inconsistency (e.g. stated totals that don't sum correctly). Do NOT flag a
+conflict based on your own paraphrase or summary of a single source's wording. If you believe
+a single source contradicts itself, you must quote the exact two phrases verbatim from that
+source's text in conflict_details that you believe contradict each other. If you cannot quote
+two exact, verbatim phrases that genuinely contradict each other, do not flag a conflict —
+re-read the source text carefully, since a single coherent statement (e.g. correctly describing
+one period as a decline and a different period as growth) is not a contradiction.
 
 Check for contradictions between data sources (e.g. revenue figures that don't match,
 conflicting dates, inconsistent financial metrics of the same type) ONLY when comparing data
@@ -328,6 +357,16 @@ Return ONLY the JSON object, no other text."""
     is_critical = parsed.get("is_critical", False)
     conflict_details = parsed.get("conflict_details", "")
 
+    # Guard against hallucinated figures: if the LLM cited a specific dollar
+    # amount that doesn't actually appear anywhere in the source evidence,
+    # treat this as a false positive rather than trusting it.
+    if conflict_detected and conflict_details:
+        if not _verify_cited_figures(conflict_details, state['rag_results'], state['tool_results']):
+            print(f"   ⚠️ Conflict claim rejected — cited figure not found in source text: {conflict_details[:150]}")
+            conflict_detected = False
+            is_critical = False
+            conflict_details = ""
+    
     print(f"   🔎 conflict_detected={conflict_detected} | is_critical={is_critical} | details={conflict_details[:150]}")
 
     return {
