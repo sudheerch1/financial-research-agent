@@ -40,6 +40,20 @@ def _call_llm(prompt: str) -> str:
 
 # ── Node 1 ──────────────────────────────────────────────────────────────────
 
+def _extract_company(question: str) -> str:
+    """Deterministically detects which company a question is about, from the
+    fixed set covered by this demo (Apple, Microsoft, Amazon). Returns "" if
+    none detected — callers must handle the empty case (no filter applied)."""
+    q = question.lower()
+    if "apple" in q or "aapl" in q:
+        return "apple"
+    if "microsoft" in q or "msft" in q:
+        return "microsoft"
+    if "amazon" in q or "amzn" in q:
+        return "amazon"
+    return ""
+
+
 def node_plan(state: AgentState) -> dict:
     """Decomposes the question into 3-7 explicit research goals."""
     prompt = f"""You are a financial research planner.
@@ -64,6 +78,8 @@ Return ONLY the JSON array, no other text."""
     if not goals:
         goals = [f"Answer the research question: {state['question']}"]
 
+    company = _extract_company(state["question"])
+
     return {
         "research_goals": goals,
         "goals_met": [False] * len(goals),
@@ -75,8 +91,8 @@ Return ONLY the JSON array, no other text."""
         "is_critical": False,
         "conflict_details": "",
         "human_approval_decision": "",
+        "company": company,
     }
-
 
 # ── Node 2 ──────────────────────────────────────────────────────────────────
 def node_rag_search(state: AgentState) -> dict:
@@ -97,7 +113,7 @@ def node_rag_search(state: AgentState) -> dict:
                 "x-api-key": os.environ.get("RAG_API_KEY", ""),
                 "Content-Type": "application/json"
             },
-            json={"question": query},
+            json={"question": query, "company": state.get("company", "")},
             timeout=30
         )
         response.raise_for_status()

@@ -35,3 +35,4 @@ class AgentState(TypedDict):
     # --- Output ---
     report_mode: str                       # "standard" | "warning" | "disputed" | etc.
     final_report: str                      # the finished investment research report
+    company: str  # detected from question: "apple", "microsoft", "amazon", or "" if undetermined
