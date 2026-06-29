@@ -19,6 +19,7 @@ BLACKLISTED_DOMAINS = {
     "tiktok.com",
     "pinterest.com",
     "quora.com",
+    "threads.net",
 }
 
 bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
