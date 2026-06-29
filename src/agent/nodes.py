@@ -171,10 +171,15 @@ identified in Step 1 (e.g. "Apple fiscal year 2024 revenue", not just "Apple rev
 Never write a search_web query that could plausibly return data for years outside
 the identified scope.
 
+
 Decide which tools to call. Extract the ticker symbol from the question.
+For any search_web call, include an "in_scope_years" arg listing the fiscal year(s)
+identified in Step 1 as 4-digit strings (e.g. ["2022", "2023", "2024"]).
+
 Respond with a JSON array of tool calls:
 [
   {{"tool": "get_stock_price", "args": {{"ticker": "AAPL"}}}},
+  {{"tool": "search_web", "args": {{"query": "...", "in_scope_years": ["2022", "2023", "2024"]}}}},
   {{"tool": "check_data_completeness", "args": {{}}}}
 ]
 

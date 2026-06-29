@@ -5,6 +5,7 @@ from src.agent.state import AgentState
 import os
 from tavily import TavilyClient
 from urllib.parse import urlparse
+import re
 
 # Domains excluded from financial research sourcing — social platforms and
 # user-generated content sites are not appropriate sources for material
@@ -141,8 +142,18 @@ def get_competitor_comparison(ticker: str) -> dict:
         return {"tool": "get_competitor_comparison", "ticker": ticker, "error": str(e)}
 
 
-def search_web(query: str) -> dict:
-    """Searches for macro/news context using live web search (Tavily)."""
+def _extract_years(text: str) -> list[str]:
+    """Extract 4-digit year-like tokens (20xx) from text."""
+    return re.findall(r"\b20\d{2}\b", text)
+
+
+def search_web(query: str, in_scope_years: list[str] | None = None) -> dict:
+    """Searches for macro/news context using live web search (Tavily).
+
+    in_scope_years: optional list of fiscal year strings (e.g. ["2022","2023","2024"]).
+    When provided, results whose content is dominated by out-of-scope years are
+    filtered out before being returned.
+    """
     try:
         client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
         response = client.search(
@@ -156,11 +167,21 @@ def search_web(query: str) -> dict:
         filtered_results = [r for r in raw_results if not _is_blacklisted(r["url"])]
         any_blacklisted = len(filtered_results) < len(raw_results)
 
-        # Tavily's synthesized answer is generated server-side from the
-        # unfiltered raw results — if any source was blacklisted, the
-        # answer text itself may be contaminated even though it won't be
-        # cited directly. Drop it in that case rather than trust it.
-        synthesized = "" if any_blacklisted else response.get("answer", "")
+        any_out_of_scope = False
+        if in_scope_years:
+            scope_set = set(in_scope_years)
+            scoped_results = []
+            for r in filtered_results:
+                years_found = _extract_years(r.get("content", "") + " " + r.get("title", ""))
+                out_of_scope_count = sum(1 for y in years_found if y not in scope_set)
+                in_scope_count = sum(1 for y in years_found if y in scope_set)
+                if years_found and out_of_scope_count > in_scope_count:
+                    any_out_of_scope = True
+                    continue
+                scoped_results.append(r)
+            filtered_results = scoped_results
+
+        synthesized = "" if (any_blacklisted or any_out_of_scope) else response.get("answer", "")
 
         sources = "\n".join(
             f"- {r['title']} ({r['url']}): {r['content'][:200]}"
@@ -181,6 +202,7 @@ def search_web(query: str) -> dict:
             "result": f"[ERROR] Web search failed: {e}",
             "data_note": "Web search unavailable for this call.",
         }
+
         
 def check_data_completeness(state: AgentState) -> dict:
     """Cross-checks data consistency across all gathered sources."""
