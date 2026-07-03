@@ -108,14 +108,15 @@ def node_rag_search(state: AgentState) -> dict:
     
     try:
         response = requests.post(
-            os.environ.get("RAG_API_ENDPOINT", "https://k0injz47nk.execute-api.us-east-1.amazonaws.com/prod/query"),
-            headers={
-                "x-api-key": os.environ.get("RAG_API_KEY", ""),
-                "Content-Type": "application/json"
-            },
-            json={"question": query, "company": state.get("company", "")},
-            timeout=30
-        )
+        os.environ.get("RAG_API_ENDPOINT", "https://pfjtvbl6ck.execute-api.us-east-1.amazonaws.com/prod/query"),
+        headers={
+            "x-api-key": os.environ.get("RAG_API_KEY", ""),
+            "Content-Type": "application/json"
+        },
+        json={"question": query, "company": state.get("company", "")},
+        timeout=30
+        )        
+        
         response.raise_for_status()
         rag_results = response.json()["answer"]
     except Exception as e:
