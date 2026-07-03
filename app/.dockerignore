@@ -1,0 +1,13 @@
+.venv
+.env
+.git
+.gitignore
+__pycache__
+**/__pycache__
+*.pyc
+tests/
+scripts/
+docs/
+requirements-dev.txt
+streamlit_app.py
+README.md
