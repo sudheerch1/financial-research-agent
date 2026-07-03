@@ -4,5 +4,6 @@ __pycache__/
 .env
 *.zip
 package/
-.pytest_cache/payload.json
+.pytest_cache/
+payload.json
 response.json
