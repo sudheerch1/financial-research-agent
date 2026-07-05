@@ -30,7 +30,7 @@ def _call_llm(prompt: str) -> str:
         modelId=LLM_MODEL_ID,
         body=json.dumps({
             "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 1024,
+            "max_tokens": 8192,
             "messages": [{"role": "user", "content": prompt}]
         })
     )
