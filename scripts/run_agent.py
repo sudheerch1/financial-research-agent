@@ -1,5 +1,6 @@
 import sys
 import os
+import uuid
 
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
 os.environ["LANGCHAIN_PROJECT"] = "financial-research-agent"
@@ -20,7 +21,7 @@ def run(question: str):
     print(f"QUESTION: {question}")
     print(f"{'='*60}\n")
 
-    config = {"configurable": {"thread_id": "test-run-1"}}
+    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
     graph_input = {"question": question}
 
     while True:
@@ -65,6 +66,9 @@ def run(question: str):
 
 
 if __name__ == "__main__":
-    run("What is the status of Apple's partnership with OpenAI?")
-    # run("What is Apple's revenue trend over the last 3 years?")
+    #run("What is the status of Apple's partnership with OpenAI?")
+    #run("What is Apple's revenue trend over the last 3 years?")
     #run("What's the latest news on Apple's AI strategy?")
+    
+    #run("What is Microsoft's revenue trend over the last 3 years?")
+    run("What is the status of Apple's partnership with OpenAI?")
