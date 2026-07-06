@@ -301,22 +301,71 @@ Return ONLY the JSON object, no other text."""
     }
 
 
+def _extract_dollar_amounts_millions(text: str) -> list[float]:
+    """Extract all $ figures from text, normalized to millions, so they
+    can be compared numerically (used to check if a cited figure is a
+    legitimate derived difference between two real source figures)."""
+    figures = []
+    for match in re.finditer(r"\$[\d,]+\.?\d*\s*(?:billion|million)?", text):
+        s = match.group()
+        num_match = re.search(r"[\d,]+\.?\d*", s)
+        if not num_match:
+            continue
+        try:
+            value = float(num_match.group().replace(",", ""))
+        except ValueError:
+            continue
+        if "billion" in s.lower():
+            value *= 1000
+        figures.append(value)
+    return figures
+
+
 def _verify_cited_figures(conflict_details: str, rag_results: str, tool_results: list) -> bool:
     """Returns True if every dollar-amount figure cited in conflict_details
-    actually appears in the source text it was supposedly drawn from.
-    Returns False if any cited figure is fabricated (not found anywhere
-    in the actual evidence) — a strong signal of hallucination."""
+    either (a) appears verbatim in the source text, or (b) is the arithmetic
+    difference between two figures that DO appear in the source text (e.g.
+    the LLM correctly stating the size of a discrepancy between two verified
+    figures) — within ~1% tolerance for rounding. Returns False only if a
+    cited figure is neither present nor derivable this way, which is a
+    stronger signal of actual fabrication rather than legitimate arithmetic
+    on already-verified figures."""
     source_text = rag_results + " " + json.dumps(tool_results)
+    source_values = _extract_dollar_amounts_millions(source_text)
 
-    # Extract dollar figures like "$388.957 billion", "$11,043 million", "$7.8 billion"
     cited_figures = re.findall(r"\$[\d,]+\.?\d*\s*(?:billion|million)?", conflict_details)
 
     for figure in cited_figures:
-        # Normalize and check rough presence — strip $ and "billion"/"million" labels,
-        # compare the numeric core against source text
         numeric_part = re.search(r"[\d,]+\.?\d*", figure)
-        if numeric_part and numeric_part.group() not in source_text:
+        if not numeric_part:
+            continue
+        raw_str = numeric_part.group()
+
+        # (a) literal match — original behavior preserved
+        if raw_str in source_text:
+            continue
+
+        # (b) derived match — is this the difference between two real source figures?
+        try:
+            cited_value = float(raw_str.replace(",", ""))
+        except ValueError:
             return False
+        if "billion" in figure.lower():
+            cited_value *= 1000
+
+        is_derived = False
+        for i in range(len(source_values)):
+            for j in range(i + 1, len(source_values)):
+                diff = abs(source_values[i] - source_values[j])
+                if diff > 0 and abs(diff - cited_value) / diff < 0.01:
+                    is_derived = True
+                    break
+            if is_derived:
+                break
+
+        if not is_derived:
+            return False
+
     return True
 
 # ── Node 6 ──────────────────────────────────────────────────────────────────
@@ -379,12 +428,12 @@ Return ONLY the JSON object, no other text."""
     # treat this as a false positive rather than trusting it.
     if conflict_detected and conflict_details:
         if not _verify_cited_figures(conflict_details, state['rag_results'], state['tool_results']):
-            print(f"   ⚠️ Conflict claim rejected — cited figure not found in source text: {conflict_details[:150]}")
+            print(f"   ⚠️ Conflict claim rejected — cited figure not found in source text: {conflict_details}")
             conflict_detected = False
             is_critical = False
             conflict_details = ""
     
-    print(f"   🔎 conflict_detected={conflict_detected} | is_critical={is_critical} | details={conflict_details[:150]}")
+    print(f"   🔎 conflict_detected={conflict_detected} | is_critical={is_critical} | details={conflict_details}")
 
     return {
         "conflict_detected": conflict_detected,
