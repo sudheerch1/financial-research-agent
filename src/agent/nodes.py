@@ -413,9 +413,6 @@ Respond with a JSON object:
 is_critical = true if the conflict would materially affect an investment decision.
 Return ONLY the JSON object, no other text."""
 
-    print(f"   🔎 [conflict check inputs] RAG: {state['rag_results'][:200]}")
-    print(f"   🔎 [conflict check inputs] Tools: {json.dumps(state['tool_results'])[:300]}")
-    
     result = _call_llm(prompt)
     parsed = _safe_json_parse(result, expect_list=False)
 
