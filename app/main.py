@@ -42,6 +42,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class UTF8CharsetMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        if response.headers.get("content-type", "").startswith("application/json"):
+            response.headers["content-type"] = "application/json; charset=utf-8"
+        return response
+
+app.add_middleware(UTF8CharsetMiddleware)
+
 # ---------------------------------------------------------------------------
 # Graph execution — wired to the real compiled graph (DynamoDB-checkpointed).
 # Mirrors the stream/interrupt pattern from run_agent.py exactly, so behavior
