@@ -495,6 +495,11 @@ Write a structured investment research report with:
 
 Be specific, cite sources, and flag any limitations.
 
+In the Executive Summary, always state the headline figure or direct answer to
+the research question in the first sentence. Any caveats, data-recency notes,
+or limitations (e.g. "this reflects the most recent quarter, not fiscal year X")
+must come after the figure has been stated, never before it.
+
 Only cite sources that appear verbatim in the provided source list above.
 Do not name a publication, platform, or outlet unless its URL is present
 in the evidence you were given for this query."""
