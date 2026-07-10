@@ -1,0 +1,38 @@
+Invoke-RestMethod -Uri "http://<NEW_IP>:8000/run" -Method Post -ContentType "application/json" -InFile "payload.json"
+
+
+3.231.215.160  
+
+
+Invoke-RestMethod -Uri "http://3.231.215.160:8000/run" -Method Post -ContentType "application/json" -InFile "payload.json"
+
+Invoke-RestMethod -Uri "http://<NEW_IP>:8000/status/<NEW_RUN_ID>"
+
+
+
+
+
+aws apigateway get-stages --rest-api-id pfjtvbl6ck --profile rag-dev --query "item[*].stageName" --output table
+
+
+https://pfjtvbl6ck.execute-api.us-east-1.amazonaws.com/prod/query
+
+
+
+remove [iSongs.info] in file name if it exists
+Remove [DRGM]  in file name if it exists
+Remove [DoReGaMa]  in file name if it exists
+Remove (SouthMp3.Org)  in file name if it exists
+Remove SenSongsMp3.Co  in file name if it exists
+If there are more than two spaces in sequece, replace it with single space
+
+[DoReGaMa]
+(SouthMp3.Org)
+SenSongsMp3.Co
+
+
+
+
+Remove [Xsongspk.me]  in file name if it exists
+
+Shiva Sahasranama Stotram - Shiva Sahasranama Stotram Album - Shivaratri Special
