@@ -9,15 +9,15 @@ def route_after_confidence(state: AgentState) -> str:
         return "react_loop"
     return "rewrite_queries"
 
-
 def route_after_reflection(state: AgentState) -> str:
     """Edge 2: after node_reflect"""
     if state["reflection_cycles"] >= 2:
         return "detect_conflict"
     if all(state["goals_met"]):
         return "detect_conflict"
+    if state.get("confidence_score", 0) >= 0.75:
+        return "react_loop"
     return "retry_search"
-
 
 def route_after_conflict(state: AgentState) -> str:
     """Edge 3: after node_detect_conflict"""

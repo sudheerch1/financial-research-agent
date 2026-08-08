@@ -65,9 +65,9 @@ def build_graph():
         {
             "detect_conflict": "node_detect_conflict",
             "retry_search": "node_rag_search",
+            "react_loop": "node_react_loop",   # ← new
         }
     )
-
     # ── Conditional Edge 3 — after conflict detection ────────────────────────
     builder.add_conditional_edges(
         "node_detect_conflict",
