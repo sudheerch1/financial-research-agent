@@ -1,13 +1,13 @@
 from src.agent.state import AgentState
 
-
 def route_after_confidence(state: AgentState) -> str:
-    """Edge 1: after node_assess_confidence"""
     if state["iteration"] >= 5:
         return "react_loop"
     if state["confidence_score"] >= 0.75:
         return "react_loop"
-    return "rewrite_queries"
+    if state.get("rewritten_queries"):
+        return "retry_search"      # NEW — already have a batch, just cycle through it
+    return "rewrite_queries"       # only fires once, before any rewrite exists
 
 def route_after_reflection(state: AgentState) -> str:
     """Edge 2: after node_reflect"""

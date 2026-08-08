@@ -102,7 +102,9 @@ def node_rag_search(state: AgentState) -> dict:
 
     query = state["question"]
     if state.get("rewritten_queries"):
-        query = state["rewritten_queries"][0]
+        idx = min(state.get("iteration", 0) - 1, len(state["rewritten_queries"]) - 1)
+        idx = max(idx, 0)
+        query = state["rewritten_queries"][idx]
     
     print(f"   📤 RAG query sent: {query}")
     

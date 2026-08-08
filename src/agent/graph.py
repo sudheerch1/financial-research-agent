@@ -53,8 +53,9 @@ def build_graph():
         "node_assess_confidence",
         route_after_confidence,
         {
-            "react_loop": "node_react_loop",   # skip ReAct stub for now
+            "react_loop": "node_react_loop",
             "rewrite_queries": "node_rewrite_queries",
+            "retry_search": "node_rag_search",   # ← new
         }
     )
 
