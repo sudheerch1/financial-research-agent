@@ -162,12 +162,19 @@ def node_react_loop(state: AgentState) -> dict:
     """LLM decides which tools to use, scoped to the question's time window."""
     from src.tools.financial_tools import TOOLS
 
+    remaining_tools = [t for t in TOOLS if t not in state.get("tool_calls_made", [])]
+
     prompt = f"""You are a financial research agent deciding which tools to use.
 
 Research question: {state["question"]}
 Research goals: {json.dumps(state["research_goals"], indent=2)}
 Evidence so far: {state["rag_results"]}
 Tools already called: {state["tool_calls_made"]}
+Gaps identified in previous research pass: {json.dumps(state.get("gaps_identified", []), indent=2)}
+Tools not yet tried: {remaining_tools}
+
+If gaps were identified above, prioritize tools from the "not yet tried" list
+that would directly close those specific gaps.
 
 STEP 1 — Determine scope: Identify the specific fiscal year(s) or date range this
 question is actually asking about (e.g. "last 3 years" relative to the most recent
