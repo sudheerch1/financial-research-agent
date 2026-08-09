@@ -449,18 +449,23 @@ Return ONLY the JSON object, no other text."""
     }
 
 # ── Node 7 ──────────────────────────────────────────────────────────────────
-
 def node_human_review(state: AgentState) -> dict:
+    valid_options = ["sec_primary", "balanced", "disputed"]
     decision = interrupt({
         "conflict_details": state["conflict_details"],
         "question": state["question"],
-        "options": ["sec_primary", "balanced", "disputed"],
+        "options": valid_options,
     })
-    return {
-        "human_approval_decision": decision,
-        "report_mode": decision,  # decision is already "sec_primary" / "balanced" / "disputed" — matches mode_instruction keys directly
-    }
 
+    normalized = decision.strip().lower() if isinstance(decision, str) else ""
+    if normalized not in valid_options:
+        print(f"   ⚠️ Unrecognized human decision '{decision}' — defaulting to 'disputed'")
+        normalized = "disputed"
+
+    return {
+        "human_approval_decision": decision,   # keep raw input for audit/logging
+        "report_mode": normalized,
+    }
 
 # ── Node 8 ──────────────────────────────────────────────────────────────────
 
