@@ -1,6 +1,8 @@
 import sys
 import os
 import uuid
+from dotenv import load_dotenv
+load_dotenv()
 
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
 os.environ["LANGCHAIN_PROJECT"] = "financial-research-agent"
@@ -8,9 +10,6 @@ os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
 os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY")
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-from dotenv import load_dotenv
-load_dotenv()
 
 from langgraph.types import Command
 from src.agent.graph import agent_graph
@@ -71,4 +70,8 @@ if __name__ == "__main__":
     #run("What's the latest news on Apple's AI strategy?")
     
     #run("What is Microsoft's revenue trend over the last 3 years?")
-    run("What is the status of Apple's partnership with OpenAI?")
+    # run("What is the status of Apple's partnership with OpenAI?")
+    # run("What was Apple's fiscal year 2025 revenue, and how does its current stock price compare to its 52-week high?")
+    run("What was Apple's total net sales for fiscal year 2025, and how does Apple's gross margin compare to Microsoft and Amazon?")
+ 
+    # run("What was Apple's total net sales for fiscal year 2025?")
