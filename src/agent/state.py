@@ -14,7 +14,9 @@ class AgentState(TypedDict):
     confidence_score: float                # 0.0–1.0 evidence quality score
     iteration: int                         # RAG retry counter (max 5)
     rewritten_queries: list[str]           # query variations from node_rewrite
-
+    best_rag_results: str                  # highest-confidence rag_results seen across retries
+    best_confidence_score: float           # the confidence_score that produced best_rag_results
+    
     # --- ReAct Tool Loop ---
     tool_calls_made: Annotated[list[str], operator.add]  # accumulates tool names
     tool_results: Annotated[list[dict], operator.add]    # accumulates tool outputs

@@ -154,8 +154,20 @@ Respond with ONLY a number between 0.0 and 1.0. No other text."""
         print(f"   ⚠️ Could not parse confidence score, raw: {result[:100]}")
         score = 0.5  # neutral fallback — won't falsely trigger high- or low-confidence routing
 
-    return {"confidence_score": score}
+    # Track the best-scoring attempt across retries, since rag_results/confidence_score
+    # are plain overwrite fields and the graph would otherwise only ever see the *last* attempt.
+    if score > state.get("best_confidence_score", 0.0):
+        best_rag_results = state["rag_results"]
+        best_confidence_score = score
+    else:
+        best_rag_results = state.get("best_rag_results", state["rag_results"])
+        best_confidence_score = state.get("best_confidence_score", score)
 
+    return {
+        "confidence_score": score,
+        "best_rag_results": best_rag_results,
+        "best_confidence_score": best_confidence_score,
+    }
 
 # ── Node 3b — ReAct Tool Loop ────────────────────────────────────────────────
 
@@ -471,6 +483,7 @@ def node_human_review(state: AgentState) -> dict:
 
 def node_write_report(state: AgentState) -> dict:
     """Produces the final investment research report."""
+    print(f"   📊 best_confidence={state.get('best_confidence_score')} vs final_confidence={state.get('confidence_score')}")
     mode = state.get("report_mode", "standard")
 
     mode_instruction = {
@@ -497,7 +510,7 @@ Research goals addressed:
 {json.dumps(state["research_goals"], indent=2)}
 
 Evidence:
-RAG/SEC results: {state["rag_results"]}
+RAG/SEC results: {state.get("best_rag_results", state["rag_results"])}
 Tool results: {json.dumps(state["tool_results"], indent=2)}
 
 Write a structured investment research report with:
