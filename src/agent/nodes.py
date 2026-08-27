@@ -71,6 +71,7 @@ Return ONLY the JSON array, no other text."""
 
     result = _call_llm(prompt)
     goals = _safe_json_parse(result, expect_list=True)
+    print(f"   🎯 Goals decomposed: {json.dumps(goals, indent=2)}")
 
     # If planning itself failed to parse, fall back to a single generic goal
     # rather than an empty goal list (which would make every downstream
@@ -225,6 +226,7 @@ Respond with a JSON array of tool calls:
 Return ONLY the JSON array, no other text."""
 
     result = _call_llm(prompt)
+    print(f"   🧠 Raw tool-selection response: {result}")
     tool_calls = _safe_json_parse(result, expect_list=True)
 
     new_tool_names = []
@@ -314,7 +316,7 @@ Return ONLY the JSON object, no other text."""
     fallback_goals_met = state.get("goals_met") or [False] * len(state["research_goals"])
     goals_met = parsed.get("goals_met", fallback_goals_met)
     gaps_identified = parsed.get("gaps", [])
-
+    print(f"   🪞 goals_met={goals_met}, gaps={gaps_identified}")
     return {
         "goals_met": goals_met,
         "gaps_identified": gaps_identified,
