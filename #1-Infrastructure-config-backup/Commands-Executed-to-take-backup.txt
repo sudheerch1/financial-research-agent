@@ -75,41 +75,103 @@ aws apigateway get-resources --rest-api-id <id> --profile rag-dev --region us-ea
 (.venv) PS C:\Tech\PROD-Grade-POC\AgenticAI\financial-research-agent> 
 
 ------------------------------------------------------------------------------------------------------
-
 Lambda function configs
-aws lambda get-function --function-name rag-query --profile rag-dev --region us-east-1 > lambda-rag-query.json | aws lambda get-function --function-name rag-document-processor --profile rag-dev --region us-east-1 > lambda-rag-doc-processor.json (includes env vars and code location in one call)
+----------------------------------------
+aws lambda get-function --function-name rag-query --profile rag-dev --region us-east-1 > lambda-rag-query.json | aws lambda get-function --function-name rag-document-processor --profile rag-dev --region us-east-1 > lambda-rag-doc-processor.json 
+
+(includes env vars and code location in one call)
 
 
 IAM roles and attached policies
-aws iam get-role --role-name financial-research-agent-task-role --profile rag-dev > iam-task-role.json | aws iam list-attached-role-policies --role-name financial-research-agent-task-role --profile rag-dev > iam-task-role-policies.json (check ecs-taskdef.json for the exact executionRoleArn/taskRoleArn names first — they may differ from this guess)
+---------------------------------------
+aws iam get-role --role-name financial-research-agent-task-role --profile rag-dev > iam-task-role.json | aws iam list-attached-role-policies --role-name financial-research-agent-task-role --profile rag-dev > iam-task-role-policies.json 
+
+(check ecs-taskdef.json for the exact executionRoleArn/taskRoleArn names first — they may differ from this guess)
 
 
 S3 bucket event-notification config
-aws s3api get-bucket-notification-configuration --bucket rag-raw-financial-911414006786 --profile rag-dev > s3-raw-bucket-notifications.json — this is important: it captures the S3-event→Lambda ingestion trigger wiring, which nothing else on this list covers
+-----------------------------------------
+aws s3api get-bucket-notification-configuration --bucket rag-raw-financial-911414006786 --profile rag-dev > s3-raw-bucket-notifications.json 
+
+— this is important: it captures the S3-event→Lambda ingestion trigger wiring, which nothing else on this list covers
 
 
 Route tables, IGW, NAT/endpoint confirmation
+---------------------------------------------
 aws ec2 describe-route-tables --filters Name=vpc-id,Values=vpc-0aaa04797f63cf421 --profile rag-dev --region us-east-1 > route-tables.json | aws ec2 describe-internet-gateways --filters Name=attachment.vpc-id,Values=vpc-0aaa04797f63cf421 --profile rag-dev --region us-east-1 > internet-gateway.json | aws ec2 describe-nat-gateways --profile rag-dev --region us-east-1 > nat-gateways.json | aws ec2 describe-vpc-endpoints --profile rag-dev --region us-east-1 > vpc-endpoints.json
 
 
 CloudWatch log group
+---------------------------------
 aws logs describe-log-groups --log-group-name-prefix /ecs/financial-research-agent --profile rag-dev --region us-east-1 > cloudwatch-log-groups.json
 
 
 
 # Authenticate Docker to ECR
+------------------------------------
 aws ecr get-login-password --region us-east-1 --profile rag-dev | docker login --username AWS --password-stdin 911414006786.dkr.ecr.us-east-1.amazonaws.com
 
 # Pull the image (check ecr-images.json for the exact tag, or use 'latest')
+---------------------------------------------------------------------------------
 docker pull 911414006786.dkr.ecr.us-east-1.amazonaws.com/financial-research-agent-backend:latest
 
 # Save it to a local tar file
+-----------------------------------
 docker save 911414006786.dkr.ecr.us-east-1.amazonaws.com/financial-research-agent-backend:latest -o financial-research-agent-backend.tar
 
 
+
+
+
+
 # Optional: compress first, since it'll be a few hundred MB
+--------------------------------------------------------------
 tar -czf financial-research-agent-backend.tar.gz financial-research-agent-backend.tar
 
 aws s3 cp financial-research-agent-backend.tar.gz s3://rag-opensearch-backup-911414006786/ecr-image-backup/ --profile rag-dev
 
 
+Back up the checkpoint table (1,010 items)
+------------------------------------------------
+aws dynamodb create-backup --table-name financial-research-agent-checkpoints --backup-name checkpoints-backup-2026-09-12 --profile rag-dev --region us-east-1 > "#1-Infrastructure-config-backup\dynamodb-checkpoints-backup-result.json"
+
+ — this creates an AWS-managed backup (not a JSON dump) that survives independently even if you delete the table. This is the one protecting your 1,010 real checkpoint items.
+
+
+
+Back up the metadata table
+-------------------------------
+aws dynamodb create-backup --table-name rag-metadata-financial --backup-name metadata-backup-2026-09-12 --profile rag-dev --region us-east-1 > "#1-Infrastructure-config-backup\dynamodb-metadata-backup-result.json"
+
+
+
+Verify both backups completed
+---------------------------------
+aws dynamodb list-backups --profile rag-dev --region us-east-1 > "#1-Infrastructure-config-backup\dynamodb-backups-list.json" — confirm both backups show status AVAILABLE before trusting them. To restore later: aws dynamodb restore-table-from-backup --target-table-name <new-name> --backup-arn <arn>
+
+
+Get the REST API ID
+---------------------
+Get-Content "#1-Infrastructure-config-backup\apigateway-apis.json" — find the "id" field for your REST API, then substitute it (no angle brackets) into the three commands below.
+
+
+API Gateway resources
+--------------------------
+aws apigateway get-resources --rest-api-id YOUR_ID --profile rag-dev --region us-east-1 > "#1-Infrastructure-config-backup\apigateway-resources.json"
+
+
+API Gateway stages
+-----------------------------
+aws apigateway get-stages --rest-api-id YOUR_ID --profile rag-dev --region us-east-1 > "#1-Infrastructure-config-backup\apigateway-stages.json"
+
+
+
+API Gateway usage plans
+--------------------------------
+aws apigateway get-usage-plans --profile rag-dev --region us-east-1 > "#1-Infrastructure-config-backup\apigateway-usage-plans.json" — this is the one that captures your API-key enforcement setting
+
+
+
+SSM parameter names
+---------------------------
+aws ssm describe-parameters --profile rag-dev --region us-east-1 > "#1-Infrastructure-config-backup\ssm-parameters-metadata.json" — names and types only, safe to commit
