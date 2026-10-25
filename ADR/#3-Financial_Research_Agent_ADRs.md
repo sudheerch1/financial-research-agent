@@ -63,7 +63,7 @@ Wrote a custom ReAct loop: the LLM reads the question, goals, and evidence gaps,
 
 **Consequences**
 - Full control over tool-call deduplication policy, retry budget, and iteration limits.
-- Known gap (accepted, see ADR-008): `remaining_tools` is currently a prompt hint only — no code-level enforcement stops the LLM from re-calling an already-used tool.
+- Known gap (accepted): `remaining_tools` is currently a prompt hint only — no code-level enforcement stops the LLM from re-calling an already-used tool.
 
 ---
 
