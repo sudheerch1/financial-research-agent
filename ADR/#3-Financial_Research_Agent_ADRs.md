@@ -114,7 +114,7 @@ An LLM-only conflict check has two independent failure modes: it can reason inco
 **Status:** Accepted — POC scope, revisit for production
 
 **Context**
-The Fargate task and ALB both need to reach the internet (Bedrock, Tavily, yfinance) and each other. A traditional pattern places the task in a private subnet behind a NAT Gateway; this project's actual deployed topology (confirmed via `aws ecs describe-services`, correcting an earlier unverified assumption) uses one public subnet for both, with no NAT Gateway at all.
+The Fargate task and ALB both need to reach the internet (Bedrock, Tavily, yfinance) and each other. A traditional pattern places the task in a private subnet behind a NAT Gateway; this project's actual deployed topology (confirmed via `aws ecs describe-services`) uses one public subnet for both, with no NAT Gateway at all.
 
 **Decision**
 Isolation is enforced identity-based, not topology-based: the task's security group accepts inbound traffic on port 8000 only from the ALB's security group (referenced by group ID, not a CIDR range). The task has a public IP but is unreachable directly, since unsolicited inbound traffic is dropped at the security group before reaching uvicorn.
@@ -223,7 +223,7 @@ Shipped with the ALB's HTTP:80 listener only. HTTPS requires a custom domain (Ro
 **Consequences**
 - A compound question (e.g., asking for one company's revenue *and* a cross-company margin comparison in the same sentence) is answered from a single combined RAG call, not a call per sub-question — retrieval quality depends on the embedding model handling compound queries adequately.
 - The system's compensating mechanism is `node_reflect` + `node_react_loop`: if the single RAG pass doesn't fully cover every goal, the gap is identified and can be closed via tool calls (financial data tool, Tavily) rather than a second, goal-targeted RAG pass.
-- Confirmed directly this session: for a question combining a single-company FY2025 metric with a three-way margin comparison, the first-pass RAG call is exactly one query covering the full compound question — not three separate retrievals.
+- Verified against `nodes.py`: for a question combining a single-company FY2025 metric with a three-way margin comparison, the first-pass RAG call is exactly one query covering the full compound question — not three separate retrievals.
 
 ---
 
@@ -242,7 +242,7 @@ Shipped with the ALB's HTTP:80 listener only. HTTPS requires a custom domain (Ro
 
 **Consequences**
 - On a genuinely multi-company question, the first-pass RAG call retrieves chunks scoped to one company only; data for the other companies named in the question must come from `node_react_loop`'s tool calls (the financial data tool covers stock/ratio-style queries reasonably well) or a later retry — not from that first RAG call.
-- Confirmed directly this session: for a question asking about Apple's FY2025 net sales *and* a gross-margin comparison against Microsoft and Amazon, `_extract_company()` detects `"apple"` and passes `company="apple"` to the first RAG call, despite the question also requiring Microsoft and Amazon data.
+- Verified against `nodes.py`: for a question asking about Apple's FY2025 net sales *and* a gross-margin comparison against Microsoft and Amazon, `_extract_company()` detects `"apple"` and passes `company="apple"` to the first RAG call, despite the question also requiring Microsoft and Amazon data.
 - Compounds with ADR-011: a multi-company, multi-metric question is both company-filtered to one company *and* sent as one unsplit query on the first pass. Both simplifications are covered by the same downstream reflect/tool-call safety net — neither is handled at the RAG layer itself.
 
 ---
