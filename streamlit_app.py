@@ -14,7 +14,7 @@ import os
 import requests
 import streamlit as st
 
-API_BASE_URL = os.environ.get("API_BASE_URL", "http://financial-research-agent-alb-557057188.us-east-1.elb.amazonaws.com")
+API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 
 def escape_markdown_dollars(text: str) -> str:
     """Streamlit's markdown renderer treats $...$ as LaTeX math delimiters,

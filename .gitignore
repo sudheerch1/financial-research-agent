@@ -7,3 +7,7 @@ package/
 .pytest_cache/
 payload.json
 response.json
+
+.venv/
+.env
+__pycache__/

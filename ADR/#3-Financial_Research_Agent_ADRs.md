@@ -2,7 +2,7 @@
 
 **Project:** LangGraph agentic RAG system answering cross-company financial questions from SEC 10-K filings (Apple, Microsoft, Amazon — FY2025)
 **Repos:** `financial-research-agent` (agent + FastAPI + Streamlit, ECS Fargate) · `rag-pipeline-financial` (RAG ingestion/query)
-**AWS:** account `911414006786`, region `us-east-1`
+**AWS:** account `<ACCOUNT_ID>`, region `us-east-1`
 
 Each record follows: Status → Context → Decision → Alternatives Considered → Consequences. Status is one of: **Accepted**, **Accepted — POC scope, revisit for production**, or **Accepted risk**.
 
