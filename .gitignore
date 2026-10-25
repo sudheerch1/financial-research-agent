@@ -11,3 +11,6 @@ response.json
 .venv/
 .env
 __pycache__/
+
+current-taskdef.json
+test-*.json
